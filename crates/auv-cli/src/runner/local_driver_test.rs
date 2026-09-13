@@ -447,6 +447,38 @@ fn input_options_reject_malformed_values_before_delivery() {
 }
 
 #[test]
+fn click_rpc_preserves_modifiers_for_window_and_screen_delivery() {
+  let modifiers = proto::ClickModifiers {
+    shift: true,
+    control: true,
+    alt: true,
+    meta: true,
+  };
+  let window = click_options_from_proto(Some(proto::ClickOptions {
+    modifiers: Some(modifiers),
+    ..Default::default()
+  }))
+  .unwrap();
+  let (_, screen) = screen_click_options_from_proto(Some(proto::ScreenClickOptions {
+    modifiers: Some(modifiers),
+    ..Default::default()
+  }))
+  .unwrap();
+  assert_eq!(
+    window.modifiers,
+    auv_driver::ClickModifiers {
+      shift: true,
+      control: true,
+      alt: true,
+      meta: true
+    }
+  );
+  assert_eq!(screen, window.modifiers);
+  assert!(click_options_from_proto(None).unwrap().modifiers.is_empty());
+  assert!(screen_click_options_from_proto(Some(Default::default())).unwrap().1.is_empty());
+}
+
+#[test]
 fn input_action_mapper_preserves_attempts_and_disturbance() {
   let action = input_action_to_proto(auv_driver::InputActionResult {
     selected_path: auv_driver::InputDeliveryPath::ClipboardPaste,
@@ -663,4 +695,54 @@ async fn keyboard_rpc_reports_wire_validation_position_without_delivering_prefix
   let progress = proto::KeyboardInputProgress::decode(error.details()).unwrap();
   assert_eq!(progress.action_index, Some(1));
   assert!(progress.completed.is_empty());
+}
+
+#[cfg(target_os = "linux")]
+mod linux_keyboard_tests {
+  use super::super::*;
+
+  #[tokio::test]
+  async fn keyboard_rpc_reaches_linux_batch_validation_and_preserves_error_progress() {
+    use auv_driver::Driver;
+    let service = LocalInputService {
+      session: auv_driver::LocalDriver::new().open_local().unwrap(),
+      mouse_motion: Default::default(),
+    };
+    let press = |key: &str| proto::KeyboardInput {
+      action: Some(proto::keyboard_input::Action::Press(proto::KeyboardPress {
+        options: Some(proto::PressKeysOptions {
+          keys: vec![key.into()],
+          count: Some(1),
+          ..Default::default()
+        }),
+        policy: proto::InputPolicy::ForegroundPreferred as i32,
+      })),
+    };
+    let target = Some(proto::InputTarget {
+      recipient: Some(proto::input_target::Recipient::Foreground(true)),
+    });
+    let result = service
+      .input_keyboard(Request::new(proto::InputKeyboardRequest {
+        target: target.clone(),
+        inputs: vec![press("a")],
+        dry_run: true,
+      }))
+      .await
+      .unwrap();
+    assert!(result.into_inner().actions.is_empty());
+    let error = service
+      .input_keyboard(Request::new(proto::InputKeyboardRequest {
+        target,
+        inputs: vec![press("a"), press("invalid-key")],
+        dry_run: false,
+      }))
+      .await
+      .unwrap_err();
+    assert_eq!(error.code(), tonic::Code::InvalidArgument);
+    use prost::Message;
+    let progress = proto::KeyboardInputProgress::decode(error.details()).unwrap();
+    assert_eq!(progress.action_index, Some(1));
+    assert_eq!(progress.completed_presses, 0);
+    assert!(progress.completed.is_empty());
+  }
 }

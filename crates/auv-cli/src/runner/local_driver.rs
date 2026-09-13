@@ -554,17 +554,17 @@ impl InputService for LocalInputService {
       })
       .collect::<Result<Vec<_>, _>>()?;
     let target = input_target_from_proto(&self.session, request.target)?;
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
       let actions = self.session.input().input_keyboard(&target, inputs, request.dry_run).map_err(keyboard_input_status)?;
       Ok(Response::new(proto::InputKeyboardResponse {
         actions: actions.unwrap_or_default().into_iter().map(input_action_to_proto).collect::<Result<_, _>>()?,
       }))
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
       let _ = (target, inputs);
-      Err(Status::unimplemented("keyboard sequences are only available on macOS"))
+      Err(Status::unimplemented("keyboard sequences are available only on macOS and Linux"))
     }
   }
 
@@ -621,8 +621,8 @@ impl InputService for LocalInputService {
     let _motion = self.mouse_motion.lock().await;
     let request = request.into_inner();
     let point = screen_point_from_proto(request.point.ok_or_else(|| Status::invalid_argument("point is required"))?)?;
-    let click = screen_click_options_from_proto(request.options)?;
-    let action = self.session.input().click_at(point.point(), click).map_err(driver_status)?;
+    let (click, modifiers) = screen_click_options_from_proto(request.options)?;
+    let action = self.session.input().click_at(point.point(), click, modifiers).map_err(driver_status)?;
     Ok(Response::new(proto::ClickScreenPointResponse {
       point: Some(screen_point_to_proto(point)),
       action: Some(input_action_to_proto(action)?),
@@ -763,7 +763,7 @@ fn keyboard_input_from_proto(input: proto::KeyboardInput) -> Result<auv_driver::
 }
 
 /// Preserve the underlying gRPC category and attach typed delivery progress.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn keyboard_input_status(error: auv_driver::KeyboardInputError) -> Status {
   let message = error.to_string();
   let status = driver_status(error.cause);
@@ -1123,6 +1123,7 @@ fn click_options_from_proto(options: Option<proto::ClickOptions>) -> Result<auv_
   Ok(auv_driver::ClickOptions {
     policy: input_policy_from_proto(options.policy)?,
     click,
+    modifiers: click_modifiers_from_proto(options.modifiers),
     window_strategy: match proto::WindowClickStrategy::try_from(options.window_strategy) {
       Ok(proto::WindowClickStrategy::Unspecified | proto::WindowClickStrategy::ChromiumCompatible) => {
         auv_driver::WindowClickStrategy::ChromiumCompatible
@@ -1133,9 +1134,21 @@ fn click_options_from_proto(options: Option<proto::ClickOptions>) -> Result<auv_
   })
 }
 
-fn screen_click_options_from_proto(options: Option<proto::ScreenClickOptions>) -> Result<auv_driver::Click, Status> {
+fn screen_click_options_from_proto(
+  options: Option<proto::ScreenClickOptions>,
+) -> Result<(auv_driver::Click, auv_driver::ClickModifiers), Status> {
   let options = options.ok_or_else(|| Status::invalid_argument("options are required"))?;
-  click_from_proto(options.click)
+  Ok((click_from_proto(options.click)?, click_modifiers_from_proto(options.modifiers)))
+}
+
+fn click_modifiers_from_proto(value: Option<proto::ClickModifiers>) -> auv_driver::ClickModifiers {
+  let value = value.unwrap_or_default();
+  auv_driver::ClickModifiers {
+    shift: value.shift,
+    control: value.control,
+    alt: value.alt,
+    meta: value.meta,
+  }
 }
 
 fn click_from_proto(click: Option<proto::Click>) -> Result<auv_driver::Click, Status> {
@@ -1634,12 +1647,8 @@ impl DisplayService for LocalDisplayService {
 pub(super) async fn serve_inherited() -> Result<(), String> {
   let (incoming, parent_disconnected) = auv_api_server::runner_transport::inherited_transport()?.into_parts();
 
-  let driver = auv_driver::LocalDriver::new();
-  #[cfg(target_os = "linux")]
-  let driver = match std::env::var_os(super::STATE_ROOT_ENV) {
-    Some(root) => driver.with_linux_portal_state_root(std::path::PathBuf::from(root).join("portal")),
-    None => driver,
-  };
+  let portal_state_root = std::env::var_os(super::STATE_ROOT_ENV).map(|root| std::path::PathBuf::from(root).join("portal"));
+  let driver = auv::local::driver(portal_state_root).map_err(|error| error.to_string())?;
   let session = driver.open_local().map_err(|error| format!("failed to open local driver: {error}"))?;
   let display = DisplayServiceServer::new(LocalDisplayService {
     session: session.clone(),

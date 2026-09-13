@@ -343,6 +343,11 @@ The AUV daemon is the long-lived process role that owns API listeners,
 Device authority, Runner creation, private Runner IPC, routing, health,
 draining, and reusable resources. It is not a catch-all Rust runtime crate.
 
+The daemon health response's `id` identifies one bound daemon instance across
+all of its listeners. Launchers may supply a fresh UUID to verify startup;
+otherwise the daemon generates one. It is public correlation data, separate
+from Device, Runner, and Run IDs, and is not an authentication credential.
+
 The `auv-daemon` library crate owns this role's persistent state and control
 semantics: Device and Run management, RunnerClass registration, Runner provider
 and supervisor lifecycle, capability route resolution, and first-party
@@ -524,6 +529,13 @@ starts its idle timeout after both conditions become true; becoming idle does
 not stop it immediately. A Runner owns runtime resources such as Driver handles,
 app state, OCR engines, or inference model sessions. The daemon owns its
 creation, readiness, health, draining, routing, and termination.
+
+The daemon lazily creates the first-party `auv.core.local` Runner with
+`unless-idle` and a five-minute idle timeout, including calls without a Run.
+Concurrent lazy creation for this class resolves to one child. Reusing the
+process preserves desktop sessions; it does not create, merge, or identify Runs.
+Explicitly created Runners retain their requested lifecycle policy. Custom
+providers retain their existing route-created lifecycle policy.
 
 Application/game implementations such as NetEase Music or Balatro may provide
 RunnerClasses. Their CLI plugins remain separate frontend processes even when
@@ -763,6 +775,14 @@ reason, and disturbance metadata. The driver capabilities remain distinct;
 the unified operation is a frontend and typed-command contract.
 
 ## Keyboard Input
+
+`Key` represents a logical key as `Modifier` or `Symbol(Keysym)`. `Keysym` comes
+from `xkeysym`; it does not identify a native physical keycode. `Modifier`
+represents Shift, Control, Alt, or Meta. Meta means Command on macOS and
+Windows/Super on Windows/Linux. `ClickModifiers` stores the combined modifier
+state for a click. Parsing a key does not prove that a platform or layout can
+deliver it. Drivers own native mappings and retain their existing input aliases.
+
 
 A **key press** is one complete down/up action. A **key combination** presses multiple
 keys before releasing them in reverse order. Repetition repeats a complete
@@ -1034,6 +1054,20 @@ not a promise that the selected path name will contain “background” or
 “foreground”; the resulting `InputActionResult` remains authoritative for the
 path actually used. Click cardinality is a separate option and may request a
 single, double, or explicitly counted repeated click with an interval.
+
+`ClickModifiers` describes the standard modifier state on a click's mouse
+events: `shift`, `control`, `alt`, and `meta`. On macOS, Alt/Meta map to
+Option/Command. It does not describe physical key identity, keyboard layout,
+left/right keys, arbitrary native keycodes, or keys held across calls. The
+macOS implementation stamps the requested flags on both down and up events;
+it does not synthesize keyboard transitions. Windows foreground and Linux
+Portal delivery use scoped keyboard transitions (Meta maps to Windows/Super),
+with release attempts on failure. Windows background messages carry only
+Shift/Control and reject Alt/Meta before activation. Linux continues to reject
+background-only window input. Delivery remains unverified until a
+separate consumer verifies the intended application result. See the
+[click modifier contract](ai/references/driver/2026-09-11-click-modifiers-contract.md)
+for evidence, protocol migration, and intentional deferrals.
 
 ## Scroll Delivery Strategy
 

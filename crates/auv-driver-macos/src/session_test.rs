@@ -219,7 +219,7 @@ mod no_steal_tests {
 
   #[test]
   fn global_click_returns_typed_input_action_result() {
-    let _: fn(&InputApi<'static>, Point, Click) -> DriverResult<InputActionResult> = InputApi::click_at;
+    let _: fn(&InputApi<'static>, Point, Click, auv_driver_common::ClickModifiers) -> DriverResult<InputActionResult> = InputApi::click_at;
   }
 
   #[test]
@@ -1073,4 +1073,16 @@ fn preparation_rejects_exited_application_and_resolves_restarted_instance() {
     let error = session.input().prepare_for_input(&target, foreground_prepare_options(Duration::ZERO)).unwrap_err();
     assert!(matches!(error, DriverError::NotFound { .. }), "{error}");
   }
+}
+
+#[test]
+fn shared_key_symbols_preserve_macos_named_key_behavior() {
+  assert_eq!(special_key_code("return").unwrap(), 36);
+  assert_eq!(special_key_code("enter").unwrap(), 76);
+  assert_eq!(special_key_code("delete").unwrap(), 51);
+  assert_eq!(special_key_code("forward_delete").unwrap(), 117);
+  assert_eq!(special_key_code("f20").unwrap(), 90);
+  assert!(special_key_code("f01").is_err());
+  assert!(special_key_code("back").is_err());
+  assert!(special_key_code("insert").is_err());
 }

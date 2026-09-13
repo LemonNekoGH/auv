@@ -35,7 +35,7 @@ pub struct WindowApi<'a> {
 
 #[derive(Clone, Copy, Debug)]
 pub struct InputApi<'a> {
-  session: &'a LinuxDriverSession,
+  pub(crate) session: &'a LinuxDriverSession,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -89,6 +89,32 @@ impl LinuxDriverSession {
 }
 
 impl PermissionApi<'_> {
+  /// Establishes and retains input/capture Portal sessions without injecting
+  /// keys or pointer events. Each Portal can request its own initial consent.
+  pub fn authorize_portals(&self) -> DriverResult<()> {
+    let mut state = self.session.state.lock().expect("linux driver session state poisoned");
+    let authorization = if state.input_session.is_none() || state.input_backend == crate::InputBackend::Uinput {
+      Some(crate::native::portal::PortalInput::open(state.restore_tokens.as_ref(), state.portal_app_id.as_ref())?)
+    } else {
+      None
+    };
+    // Explicit Portal setup must not replace a selected uinput session.
+    let temporary_authorization = if state.input_backend == crate::InputBackend::Portal {
+      if let Some(session) = authorization {
+        state.input_session = Some(crate::input::InputSession::Portal(session));
+      }
+      None
+    } else {
+      authorization
+    };
+    if state.screencast_session.is_none() {
+      state.screencast_session =
+        Some(crate::native::portal::ScreenCastSession::open_monitor(state.restore_tokens.as_ref(), state.portal_app_id.as_ref())?);
+    }
+    drop(temporary_authorization);
+    Ok(())
+  }
+
   pub fn probe_linux(&self) -> LinuxPortalProbe {
     let _ = self.session;
     probe_portals()
@@ -204,7 +230,7 @@ impl WindowApi<'_> {
       )],
     };
     let screen_point = self.to_screen_point(window, point)?.point();
-    let mut result = self.session.input().click_at(screen_point, options.click)?;
+    let mut result = self.session.input().click_at(screen_point, options.click, options.modifiers)?;
     result.attempts.splice(0..0, focus_attempts);
     add_foreground_window_fallback_reason(
       &mut result,
@@ -310,8 +336,8 @@ impl InputApi<'_> {
     move_to(&self.session.state, point)
   }
 
-  pub fn click_at(&self, point: Point, click: Click) -> DriverResult<InputActionResult> {
-    click_at(&self.session.state, point, click)
+  pub fn click_at(&self, point: Point, click: Click, modifiers: auv_driver_common::ClickModifiers) -> DriverResult<InputActionResult> {
+    click_at(&self.session.state, point, click, modifiers)
   }
 
   pub fn scroll_at(&self, point: Point, scroll: Scroll, settle: std::time::Duration) -> DriverResult<InputActionResult> {
