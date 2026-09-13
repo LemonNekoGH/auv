@@ -23,6 +23,7 @@ members = [
   "crates/auv-driver",
   "crates/auv-driver-common",
   "crates/auv-driver-linux",
+  "crates/auv-driver-linux-x11",
   "crates/auv-driver-macos",
   "crates/auv-driver-overlay",
   "crates/auv-driver-overlay-common",
@@ -46,7 +47,7 @@ default-members = [ "crates/auv-cli" ]
 resolver = "2"
 
 [workspace.package]
-version = "0.0.16"
+version = "0.0.17"
 authors = [ "Moeru AI" ]
 edition = "2024"
 rust-version = "1.91"

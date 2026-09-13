@@ -2,7 +2,7 @@
 
 Platform drivers, input, window, capture, permissions
 
-Count: **38**
+Count: **39**
 
 - [`2026-05-20-macos-driver-namespace-after-window-screen-design.md`](2026-05-20-macos-driver-namespace-after-window-screen-design.md)
 - [`2026-05-20-macos-osascript-backend-design.md`](2026-05-20-macos-osascript-backend-design.md)
@@ -39,15 +39,17 @@ Count: **38**
 - [`2026-09-07-overlay-host-theme.md`](2026-09-07-overlay-host-theme.md)
 
 - [`2026-09-11-click-modifiers-contract.md`](2026-09-11-click-modifiers-contract.md)
-- [`2026-09-09-background-ax-and-media-gap-review.md`](2026-09-09-background-ax-and-media-gap-review.md)
-- [`2026-09-09-computer-use-code-and-upstream-review.md`](2026-09-09-computer-use-code-and-upstream-review.md)
-- [`2026-09-09-computer-use-framework-comparison-note.md`](2026-09-09-computer-use-framework-comparison-note.md)
-- [`2026-09-09-computer-use-improvement-candidates.md`](2026-09-09-computer-use-improvement-candidates.md)
+- [`2026-09-09-background-ax-and-media-gap-review.md`](2026-09-09-background-ax-and-media-gap-review.md): Deeper background input and AX review, plus microphone/system-audio distinctions and three media capability candidates with pinned source evidence.
+- [`2026-09-09-computer-use-code-and-upstream-review.md`](2026-09-09-computer-use-code-and-upstream-review.md): Follow-up source audit, dated upstream changes, correctness risks, KWWK native-core lineage, and additional component references.
+- [`2026-09-09-computer-use-framework-comparison-note.md`](2026-09-09-computer-use-framework-comparison-note.md): Source-level comparison of AUV, Peekaboo, CUA and kwwk, separating native OS capabilities from frontend exposure and infrastructure.
+- [`2026-09-09-computer-use-improvement-candidates.md`](2026-09-09-computer-use-improvement-candidates.md): Thirty-one separately reviewable improvements with priority, difficulty, trigger flows, AUV/upstream permalinks, and acceptance criteria; includes atomic APIs, platform models, scripting, Windows UIA, and remote Runner lifecycle.
 - [`2026-09-13-wayland-background-input-research.md`](2026-09-13-wayland-background-input-research.md): Accepted scope, implementation PRs, Portal persistence, compositor alternatives, and evidence boundaries.
 
 - [`2026-09-12-linux-portal-authorization-and-runner-reuse.md`](2026-09-12-linux-portal-authorization-and-runner-reuse.md) — first-party Portal identity, explicit authorization, SDK process ownership, local Runner reuse, Run correlation, and validation limits.
 
 - [`2026-09-12-uinput-and-wayland-validation.md`](2026-09-12-uinput-and-wayland-validation.md)
+
+- [`2026-09-12-linux-x11-compatibility.md`](2026-09-12-linux-x11-compatibility.md): Standalone legacy X11 capture/input crate, environment setup, Xvfb application evidence, and integration limits.
 
 ## Related
 
