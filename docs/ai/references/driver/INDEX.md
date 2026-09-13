@@ -49,7 +49,7 @@ Count: **39**
 
 - [`2026-09-12-uinput-and-wayland-validation.md`](2026-09-12-uinput-and-wayland-validation.md)
 
-- [`2026-09-12-linux-x11-compatibility.md`](2026-09-12-linux-x11-compatibility.md): Standalone legacy X11 capture/input crate, environment setup, Xvfb application evidence, and integration limits.
+- [`2026-09-13-mobile-use-platform-backends-research.md`](2026-09-13-mobile-use-platform-backends-research.md): Source-backed mobile agent modes, Android/iOS/Harmony backends, clone inventory, and OpenHarmony evidence boundaries.
 
 ## Related
 
