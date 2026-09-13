@@ -1,6 +1,8 @@
 use auv_inference_common::InferenceError;
 use std::path::PathBuf;
 
+#[cfg(feature = "runtime")]
+use crate::execution_providers;
 use crate::{ExecutionProvider, OrtModelConfig, OrtSession, TopPrediction, provider_name, softmax, top1};
 
 #[test]
@@ -20,6 +22,30 @@ fn provider_names_match_onnx_runtime_identifiers() {
   assert_eq!(provider_name(ExecutionProvider::Cpu), "CPUExecutionProvider");
   assert_eq!(provider_name(ExecutionProvider::CoreMl), "CoreMLExecutionProvider");
   assert_eq!(provider_name(ExecutionProvider::Cuda), "CUDAExecutionProvider");
+}
+
+#[cfg(all(feature = "runtime", not(feature = "coreml")))]
+#[test]
+fn coreml_without_its_feature_is_rejected() {
+  let error = execution_providers(ExecutionProvider::CoreMl).expect_err("CoreML must not fall back to CPU");
+
+  assert!(matches!(
+    error,
+    InferenceError::Backend { message }
+      if message == "requested execution provider CoreMLExecutionProvider is unavailable because auv-inference-ort was built without the 'coreml' feature"
+  ));
+}
+
+#[cfg(all(feature = "runtime", not(feature = "cuda")))]
+#[test]
+fn cuda_without_its_feature_is_rejected() {
+  let error = execution_providers(ExecutionProvider::Cuda).expect_err("CUDA must not fall back to CPU");
+
+  assert!(matches!(
+    error,
+    InferenceError::Backend { message }
+      if message == "requested execution provider CUDAExecutionProvider is unavailable because auv-inference-ort was built without the 'cuda' feature"
+  ));
 }
 
 #[test]

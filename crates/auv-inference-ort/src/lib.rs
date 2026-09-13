@@ -61,10 +61,8 @@ impl OrtSession {
     require_model_path(&config.model_path)?;
 
     let mut builder = Session::builder().map_err(backend_error)?;
-    let providers = execution_providers(config.execution_provider);
-    if !providers.is_empty() {
-      builder = builder.with_execution_providers(providers).map_err(backend_error)?;
-    }
+    let providers = execution_providers(config.execution_provider)?;
+    builder = builder.with_execution_providers(providers).map_err(backend_error)?;
     let model = builder.commit_from_file(&config.model_path).map_err(backend_error)?;
 
     Ok(Self {
@@ -73,14 +71,27 @@ impl OrtSession {
   }
 
   pub fn run_f32(&self, input: F32Tensor) -> InferenceResult<Vec<F32Tensor>> {
-    let array = ArrayD::from_shape_vec(IxDyn(&input.shape), input.data).map_err(|error| InferenceError::Backend {
-      message: error.to_string(),
-    })?;
-    let tensor = TensorRef::from_array_view(array.view()).map_err(backend_error)?;
+    self.run_f32_many(vec![input])
+  }
+
+  pub fn run_f32_many(&self, inputs: Vec<F32Tensor>) -> InferenceResult<Vec<F32Tensor>> {
+    let arrays = inputs
+      .into_iter()
+      .map(|input| {
+        let array = ArrayD::from_shape_vec(IxDyn(&input.shape), input.data).map_err(|error| InferenceError::Backend {
+          message: error.to_string(),
+        })?;
+        Ok((input.name, array))
+      })
+      .collect::<InferenceResult<Vec<_>>>()?;
+    let tensors = arrays
+      .iter()
+      .map(|(name, array)| Ok((name.as_str(), TensorRef::from_array_view(array.view()).map_err(backend_error)?)))
+      .collect::<InferenceResult<Vec<_>>>()?;
     let mut model = self.model.lock().map_err(|error| InferenceError::SessionUnavailable {
       reason: error.to_string(),
     })?;
-    let outputs = model.run(vec![(input.name, tensor)]).map_err(backend_error)?;
+    let outputs = model.run(tensors).map_err(backend_error)?;
 
     outputs
       .keys()
@@ -164,25 +175,48 @@ fn backend_error<R>(error: ort::Error<R>) -> InferenceError {
 }
 
 #[cfg(feature = "runtime")]
-fn execution_providers(provider: ExecutionProvider) -> Vec<ort::ep::ExecutionProviderDispatch> {
+fn execution_providers(provider: ExecutionProvider) -> InferenceResult<Vec<ort::ep::ExecutionProviderDispatch>> {
   #[allow(unreachable_patterns)]
-  match provider {
-    ExecutionProvider::Cpu => vec![ort::ep::CPU::default().build()],
+  let providers = match provider {
+    ExecutionProvider::Cpu => vec![ort::ep::CPU::default().build().error_on_failure()],
     #[cfg(feature = "coreml")]
-    ExecutionProvider::CoreMl => vec![ort::ep::CoreML::default().build()],
+    ExecutionProvider::CoreMl => vec![ort::ep::CoreML::default().build().error_on_failure()],
     #[cfg(feature = "cuda")]
-    ExecutionProvider::Cuda => vec![ort::ep::CUDA::default().build()],
+    ExecutionProvider::Cuda => vec![ort::ep::CUDA::default().build().error_on_failure()],
     #[cfg(feature = "directml")]
-    ExecutionProvider::DirectMl => vec![ort::ep::DirectML::default().build()],
+    ExecutionProvider::DirectMl => vec![ort::ep::DirectML::default().build().error_on_failure()],
     #[cfg(feature = "openvino")]
-    ExecutionProvider::OpenVino => vec![ort::ep::OpenVINO::default().build()],
+    ExecutionProvider::OpenVino => vec![ort::ep::OpenVINO::default().build().error_on_failure()],
     #[cfg(feature = "tensorrt")]
-    ExecutionProvider::TensorRt => vec![ort::ep::TensorRT::default().build()],
+    ExecutionProvider::TensorRt => vec![ort::ep::TensorRT::default().build().error_on_failure()],
     #[cfg(feature = "webgpu")]
-    ExecutionProvider::WebGpu => vec![ort::ep::WebGPU::default().build()],
+    ExecutionProvider::WebGpu => vec![ort::ep::WebGPU::default().build().error_on_failure()],
     #[cfg(feature = "xnnpack")]
-    ExecutionProvider::Xnnpack => vec![ort::ep::XNNPACK::default().build()],
-    _ => Vec::new(),
+    ExecutionProvider::Xnnpack => vec![ort::ep::XNNPACK::default().build().error_on_failure()],
+    _ => {
+      return Err(InferenceError::Backend {
+        message: format!(
+          "requested execution provider {} is unavailable because auv-inference-ort was built without the '{}' feature",
+          provider_name(provider),
+          provider_feature(provider)
+        ),
+      });
+    }
+  };
+  Ok(providers)
+}
+
+#[cfg(feature = "runtime")]
+fn provider_feature(provider: ExecutionProvider) -> &'static str {
+  match provider {
+    ExecutionProvider::Cpu => "runtime",
+    ExecutionProvider::CoreMl => "coreml",
+    ExecutionProvider::Cuda => "cuda",
+    ExecutionProvider::DirectMl => "directml",
+    ExecutionProvider::OpenVino => "openvino",
+    ExecutionProvider::TensorRt => "tensorrt",
+    ExecutionProvider::WebGpu => "webgpu",
+    ExecutionProvider::Xnnpack => "xnnpack",
   }
 }
 

@@ -785,6 +785,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "auv-game-dome-keeper"
+version = "0.0.18"
+dependencies = [
+ "auv",
+ "auv-api-proto",
+ "auv-driver",
+ "auv-inference-ort",
+ "clap",
+ "image",
+ "tokio",
+]
+
+[[package]]
 name = "auv-game-minecraft"
 version = "0.0.18"
 dependencies = [

@@ -28,6 +28,7 @@ members = [
   "crates/auv-driver-overlay-common",
   "crates/auv-driver-windows",
   "supported/games/auv-game-balatro",
+  "supported/games/auv-game-dome-keeper",
   "supported/games/auv-game-minecraft",
   "supported/games/auv-game-osu",
   "supported/apps/auv-gnome-control-center",
