@@ -565,6 +565,22 @@ daemon resolve or create a live instance. Explicit `CreateRunner` exists only
 for prewarming an admitted class; required-capability scheduling, caller-owned
 reuse policy, lease deadlines, and release RPCs are not public API concepts.
 
+## Recent frame buffer
+
+A recent frame buffer is a bounded, Runner-owned, in-memory sequence of screen
+captures for one Window, Display, or screen Region. The caller chooses the
+sampling rate and frame capacity. It may also choose exact output dimensions;
+when it does not, each capture keeps its native pixel dimensions. Buffered
+frames use the existing RGBA8 `CapturedFrame` contract and remain ordered by a
+buffer-local sequence number.
+
+A recent frame buffer performs capture scheduling, optional resizing, and tail
+retention only. It does not apply game-specific cropping, model preprocessing,
+image compression, inference, artifact persistence, or Run recording. Callers
+close buffers explicitly, and the owning Runner closes any remaining buffers
+during shutdown. Opening and reading a buffer are separate calls, so callers
+must use a Run-affine route that keeps both calls on the same Runner.
+
 ## Runner service surface
 
 Registering a RunnerClass approves its whole gRPC endpoint, not a daemon-owned

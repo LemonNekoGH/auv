@@ -1,0 +1,92 @@
+// EXPERIMENTAL / UNSTABLE
+syntax = "proto3";
+
+package auv.api.driver.v1;
+
+import "auv/api/annotations/v1/annotations.proto";
+import "auv/api/driver/v1/capture.proto";
+import "auv/api/driver/v1/display.proto";
+import "auv/api/driver/v1/geometry.proto";
+import "auv/api/driver/v1/window.proto";
+import "auv/api/image/v1/image.proto";
+
+service RecentFramesService {
+  rpc OpenFrameBuffer(OpenFrameBufferRequest) returns (OpenFrameBufferResponse) {
+    option (auv.api.annotations.v1.discoverable) = true;
+    option (auv.api.annotations.v1.effect) = METHOD_EFFECT_MUTATION;
+  }
+  rpc GetRecentFrames(GetRecentFramesRequest) returns (GetRecentFramesResponse) {
+    option (auv.api.annotations.v1.discoverable) = true;
+    option (auv.api.annotations.v1.effect) = METHOD_EFFECT_READ_ONLY;
+  }
+  rpc CloseFrameBuffer(CloseFrameBufferRequest) returns (CloseFrameBufferResponse) {
+    option (auv.api.annotations.v1.discoverable) = true;
+    option (auv.api.annotations.v1.effect) = METHOD_EFFECT_MUTATION;
+  }
+}
+
+// Opaque reference to a frame buffer owned by one Runner process. Calls that
+// reuse this reference must use Run-affine routing to reach the same Runner.
+message FrameBufferRef {
+  string frame_buffer_id = 1;
+}
+
+message DisplayCaptureTarget {
+  // Absence selects the primary display.
+  DisplaySelector selector = 1;
+}
+
+message RegionCaptureTarget {
+  ScreenRect region = 1;
+  // Absence resolves the display containing the requested screen region.
+  DisplaySelector selector = 2;
+}
+
+message CaptureTarget {
+  oneof target {
+    WindowRef window = 1;
+    DisplayCaptureTarget display = 2;
+    RegionCaptureTarget region = 3;
+  }
+}
+
+message OpenFrameBufferRequest {
+  CaptureTarget target = 1;
+  uint32 target_fps = 2;
+  // Maximum number of newest frames retained by this buffer.
+  uint32 frame_capacity = 3;
+  // When present, each captured frame is resized to this exact pixel size
+  // before it enters the buffer. Absence preserves the capture's pixel size.
+  // CapturedFrame bounds and source scale metadata are not rewritten.
+  auv.api.image.v1.PixelSize output_size = 4;
+}
+
+message OpenFrameBufferResponse {
+  FrameBufferRef frame_buffer = 1;
+}
+
+message RecentFrame {
+  // Monotonically increasing within this frame buffer.
+  uint64 sequence = 1;
+  CapturedFrame capture = 2;
+}
+
+message GetRecentFramesRequest {
+  FrameBufferRef frame_buffer = 1;
+  // Return frames newer than this sequence. Zero starts at the retained tail.
+  uint64 after_sequence = 2;
+}
+
+message GetRecentFramesResponse {
+  // Frames are ordered from oldest to newest.
+  repeated RecentFrame frames = 1;
+  uint64 latest_sequence = 2;
+  // Frames evicted from the buffer since it was opened.
+  uint64 dropped_frames = 3;
+}
+
+message CloseFrameBufferRequest {
+  FrameBufferRef frame_buffer = 1;
+}
+
+message CloseFrameBufferResponse {}
