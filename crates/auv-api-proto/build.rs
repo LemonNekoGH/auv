@@ -129,6 +129,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
       "../../proto/auv/api/daemon/v1/runner.proto",
       "../../proto/auv/api/transport/websocket/v1/websocket.proto",
       "../../proto/auv/api/driver/v1/capture.proto",
+      "../../proto/auv/api/driver/v1/recent_frames.proto",
       "../../proto/auv/api/driver/v1/display.proto",
       "../../proto/auv/api/driver/v1/window.proto",
       "../../proto/auv/api/driver/v1/geometry.proto",
@@ -154,6 +155,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   println!("cargo:rerun-if-changed=../../proto/auv/api/daemon/v1/runner.proto");
   println!("cargo:rerun-if-changed=../../proto/auv/api/transport/websocket/v1/websocket.proto");
   println!("cargo:rerun-if-changed=../../proto/auv/api/driver/v1/capture.proto");
+  println!("cargo:rerun-if-changed=../../proto/auv/api/driver/v1/recent_frames.proto");
   println!("cargo:rerun-if-changed=../../proto/auv/api/driver/v1/display.proto");
   println!("cargo:rerun-if-changed=../../proto/auv/api/driver/v1/window.proto");
   println!("cargo:rerun-if-changed=../../proto/auv/api/driver/v1/geometry.proto");

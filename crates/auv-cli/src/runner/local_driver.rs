@@ -10,6 +10,7 @@ use auv_api_proto::auv::api::driver::v1::capture_service_server::{CaptureService
 use auv_api_proto::auv::api::driver::v1::display_service_server::{DisplayService, DisplayServiceServer};
 use auv_api_proto::auv::api::driver::v1::input_service_server::{InputService, InputServiceServer};
 use auv_api_proto::auv::api::driver::v1::overlay_service_server::{OverlayService, OverlayServiceServer};
+use auv_api_proto::auv::api::driver::v1::recent_frames_service_server::RecentFramesServiceServer;
 use auv_api_proto::auv::api::driver::v1::text_recognition_service_server::{TextRecognitionService, TextRecognitionServiceServer};
 use auv_api_proto::auv::api::driver::v1::window_service_server::{WindowService, WindowServiceServer};
 use std::pin::Pin;
@@ -788,7 +789,10 @@ fn keyboard_status_with_progress(status: Status, progress: auv_driver::KeyboardI
   Status::with_details(status.code(), status.message(), details.encode_to_vec().into())
 }
 
-fn resolve_window_ref(session: &auv_driver::LocalDriverSession, window_ref: proto::WindowRef) -> Result<auv_driver::Window, Status> {
+pub(super) fn resolve_window_ref(
+  session: &auv_driver::LocalDriverSession,
+  window_ref: proto::WindowRef,
+) -> Result<auv_driver::Window, Status> {
   if window_ref.window_id.trim().is_empty() {
     return Err(Status::invalid_argument("window.window_id is required"));
   }
@@ -1432,7 +1436,7 @@ fn ratio_rect_from_proto(region: Option<auv_api_proto::auv::api::image::v1::Norm
   Ok(auv_driver::RatioRect::new(region.x, region.y, region.width, region.height))
 }
 
-fn rect_from_proto(rect: proto::ScreenRect, field: &'static str) -> Result<auv_driver::Rect, Status> {
+pub(super) fn rect_from_proto(rect: proto::ScreenRect, field: &'static str) -> Result<auv_driver::Rect, Status> {
   let values = [rect.x, rect.y, rect.width, rect.height];
   if values.iter().any(|value| !value.is_finite()) || rect.width <= 0.0 || rect.height <= 0.0 {
     return Err(Status::invalid_argument(format!("{field} must be finite with positive width and height")));
@@ -1500,7 +1504,7 @@ impl CaptureService for LocalCaptureService {
   }
 }
 
-fn display_selector_from_proto(selector: Option<proto::DisplaySelector>) -> Result<Option<String>, Status> {
+pub(super) fn display_selector_from_proto(selector: Option<proto::DisplaySelector>) -> Result<Option<String>, Status> {
   match selector.and_then(|selector| selector.selector) {
     None => Ok(None),
     Some(proto::display_selector::Selector::Display(display)) if !display.display_id.trim().is_empty() => Ok(Some(display.display_id)),
@@ -1598,7 +1602,7 @@ fn display_to_proto(display: auv_driver::Display) -> proto::Display {
   }
 }
 
-fn capture_to_proto(capture: auv_driver::Capture) -> proto::CapturedFrame {
+pub(super) fn capture_to_proto(capture: auv_driver::Capture) -> proto::CapturedFrame {
   let width = capture.image.width();
   let height = capture.image.height();
   proto::CapturedFrame {
@@ -1679,12 +1683,17 @@ pub(super) async fn serve_inherited() -> Result<(), String> {
     session: session.clone(),
     owner_thread: std::thread::current().id(),
   });
+  let recent_frames_service = super::recent_frames::Service::new(session.clone());
   let capture =
     CaptureServiceServer::new(LocalCaptureService { session }).max_encoding_message_size(auv_api_proto::GRPC_MESSAGE_SIZE_UNLIMITED);
+  let recent_frames = RecentFramesServiceServer::new(recent_frames_service.clone())
+    .max_decoding_message_size(auv_api_proto::GRPC_MESSAGE_SIZE_UNLIMITED)
+    .max_encoding_message_size(auv_api_proto::GRPC_MESSAGE_SIZE_UNLIMITED);
   let (health_reporter, health) = tonic_health::server::health_reporter();
   health_reporter.set_serving::<DisplayServiceServer<LocalDisplayService>>().await;
   health_reporter.set_serving::<WindowServiceServer<LocalWindowService>>().await;
   health_reporter.set_serving::<CaptureServiceServer<LocalCaptureService>>().await;
+  health_reporter.set_serving::<RecentFramesServiceServer<super::recent_frames::Service>>().await;
   health_reporter.set_serving::<TextRecognitionServiceServer<LocalTextRecognitionService>>().await;
   health_reporter.set_serving::<InputServiceServer<LocalInputService>>().await;
   #[cfg(target_os = "macos")]
@@ -1701,6 +1710,7 @@ pub(super) async fn serve_inherited() -> Result<(), String> {
     "auv.api.driver.v1.DisplayService",
     "auv.api.driver.v1.WindowService",
     "auv.api.driver.v1.CaptureService",
+    "auv.api.driver.v1.RecentFramesService",
     "auv.api.driver.v1.TextRecognitionService",
     "auv.api.driver.v1.InputService",
   ];
@@ -1718,12 +1728,13 @@ pub(super) async fn serve_inherited() -> Result<(), String> {
   let reflection =
     auv_api_server::reflection::service(&descriptor_set).map_err(|error| format!("failed to build local Runner reflection: {error}"))?;
 
-  tonic::transport::Server::builder()
+  let serve_result = tonic::transport::Server::builder()
     .add_service(health)
     .add_service(reflection)
     .add_service(display)
     .add_service(window)
     .add_service(capture)
+    .add_service(recent_frames)
     .add_service(text_recognition)
     .add_service(input)
     .add_service(permission)
@@ -1733,7 +1744,13 @@ pub(super) async fn serve_inherited() -> Result<(), String> {
     .add_service(overlay)
     .serve_with_incoming_shutdown(incoming, parent_disconnected)
     .await
-    .map_err(|error| format!("Runner transport failed: {error}"))
+    .map_err(|error| format!("Runner transport failed: {error}"));
+  let shutdown_result = recent_frames_service.shutdown().await.map_err(|error| format!("recent-frame shutdown failed: {error}"));
+  match (serve_result, shutdown_result) {
+    (Ok(()), Ok(())) => Ok(()),
+    (Err(error), _) => Err(error),
+    (Ok(()), Err(error)) => Err(error),
+  }
 }
 
 #[cfg(not(any(unix, windows)))]

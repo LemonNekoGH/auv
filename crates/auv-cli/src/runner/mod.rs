@@ -1,6 +1,7 @@
 //! First-party Runner process entrypoints hosted by the `auv` executable.
 
 mod local_driver;
+mod recent_frames;
 
 pub(crate) const INTERNAL_SENTINEL: &str = "__auv-internal-runner";
 pub(crate) const LOCAL_DRIVER_ROLE: &str = "local-driver";
