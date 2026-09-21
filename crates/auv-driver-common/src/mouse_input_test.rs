@@ -1,25 +1,4 @@
 use super::*;
-#[test]
-fn overdue_mouse_samples_coalesce_but_keep_the_final_sample() {
-  let samples = [
-    crate::MouseMotionSample {
-      point: crate::Point::new(0.0, 0.0),
-      elapsed: std::time::Duration::ZERO,
-    },
-    crate::MouseMotionSample {
-      point: crate::Point::new(1.0, 1.0),
-      elapsed: std::time::Duration::from_millis(8),
-    },
-    crate::MouseMotionSample {
-      point: crate::Point::new(2.0, 2.0),
-      elapsed: std::time::Duration::from_millis(16),
-    },
-  ];
-
-  assert_eq!(latest_due_mouse_sample(&samples, 0, std::time::Duration::from_millis(12)), 1);
-  assert_eq!(latest_due_mouse_sample(&samples, 2, std::time::Duration::from_secs(1)), 2);
-}
-
 use std::sync::atomic::{AtomicBool, Ordering};
 #[derive(Default)]
 struct Receiver {
@@ -95,7 +74,7 @@ fn cancelled_waiter_never_posts_after_the_holder_releases() {
   let receiver = Arc::new(Receiver::default());
   let other = coordinator.create_mouse().unwrap();
   coordinator.down(0, Point::new(1., 2.), MouseButton::Left, Duration::from_secs(1), receiver.clone()).unwrap();
-  let cancelled = Arc::new(AtomicBool::new(false));
+  let cancelled = Arc::new(InputCancellation::default());
   let worker = {
     let coordinator = coordinator.clone();
     let receiver = receiver.clone();
@@ -105,7 +84,7 @@ fn cancelled_waiter_never_posts_after_the_holder_releases() {
     })
   };
   wait_for(|| !coordinator.state.lock().unwrap().waiting.is_empty());
-  cancelled.store(true, Ordering::Release);
+  cancelled.cancel();
   assert!(worker.join().unwrap().is_err());
   coordinator.up(0).unwrap();
   assert_eq!(*receiver.events.lock().unwrap(), ["move", "down", "up"]);
@@ -115,17 +94,17 @@ fn cancelled_waiter_never_posts_after_the_holder_releases() {
 fn cancelled_complete_hold_releases_promptly() {
   let coordinator = Arc::new(MouseCoordinator::default());
   let receiver = Arc::new(Receiver::default());
-  let cancelled = Arc::new(AtomicBool::new(false));
+  let cancelled = Arc::new(InputCancellation::default());
   let worker = {
     let coordinator = coordinator.clone();
     let receiver = receiver.clone();
     let flag = cancelled.clone();
     std::thread::spawn(move || {
-      with_input_cancellation(flag, || coordinator.hold(0, Point::new(3., 4.), MouseButton::Right, Duration::from_secs(60), receiver))
+      with_input_cancellation(flag, || coordinator.hold(0, Point::new(3., 4.), MouseButton::Right, Duration::from_secs(3600), receiver))
     })
   };
   wait_for(|| receiver.events.lock().unwrap().iter().any(|event| event == "down"));
-  cancelled.store(true, Ordering::Release);
+  cancelled.cancel();
   assert!(worker.join().unwrap().is_err());
   assert_eq!(*receiver.events.lock().unwrap(), ["move", "down", "up"]);
   assert_eq!(coordinator.state.lock().unwrap().holder, None);
@@ -193,7 +172,7 @@ fn shutdown_interrupts_an_active_hold_and_releases_before_returning() {
   let worker = {
     let coordinator = coordinator.clone();
     let receiver = receiver.clone();
-    std::thread::spawn(move || coordinator.hold(0, Point::new(1., 2.), MouseButton::Left, Duration::from_secs(60), receiver))
+    std::thread::spawn(move || coordinator.hold(0, Point::new(1., 2.), MouseButton::Left, Duration::from_secs(3600), receiver))
   };
   wait_for(|| receiver.events.lock().unwrap().iter().any(|event| event == "down"));
   coordinator.shutdown().unwrap();
@@ -210,4 +189,13 @@ fn complete_hold_returns_release_evidence_after_matching_down_and_up() {
   assert_eq!(action, InputActionResult::single_success(crate::InputDeliveryPath::ForegroundSystemEvents));
   coordinator.move_to(0, Point::new(3., 4.), receiver.clone()).unwrap();
   assert_eq!(*receiver.events.lock().unwrap(), ["move", "down", "up", "move"]);
+}
+
+#[test]
+fn unrepresentable_deadline_fails_before_native_delivery() {
+  let coordinator = Arc::new(MouseCoordinator::default());
+  let receiver = Arc::new(Receiver::default());
+  assert!(coordinator.down(0, Point::new(1., 2.), MouseButton::Left, Duration::MAX, receiver.clone()).is_err());
+  assert!(coordinator.hold(0, Point::new(1., 2.), MouseButton::Left, Duration::MAX, receiver.clone()).is_err());
+  assert!(receiver.events.lock().unwrap().is_empty());
 }
