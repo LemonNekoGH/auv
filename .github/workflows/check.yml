@@ -86,6 +86,47 @@ jobs:
           changes=$(git status --porcelain --untracked-files=all -- proto/vendor)
           if [ -n "$changes" ]; then
             printf '%s\n' "$changes"
-            echo "Run scripts/generate-proto-vendor and commit proto/vendor."
+            echo "Run scripts/generate-proto-vendor."
             exit 1
           fi
+
+  cargo-package:
+    name: package crates.io crates
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Package and compile registry archives
+        run: |
+          cargo package --locked \
+            --package auv-api-proto \
+            --package auv-cli-common-macros \
+            --package auv-cli-invoke-macros \
+            --package auv-driver-common \
+            --package auv-inference-common \
+            --package auv-query-readiness \
+            --package auv-tracing \
+            --package auv-api-client \
+            --package auv-cli-common \
+            --package auv-driver-linux \
+            --package auv-driver-overlay-common \
+            --package auv-inference-ort \
+            --package auv-inference-ultralytics \
+            --package auv-media-macos \
+            --package auv-tracing-otel \
+            --package auv-view \
+            --package auv-driver-overlay-macos \
+            --package auv-driver-overlay-windows \
+            --package auv-task-object-detection \
+            --package auv-driver-overlay \
+            --package auv-driver-macos \
+            --package auv-driver-windows \
+            --package auv-driver \
+            --package auv-core \
+            --package auv-scan \
+            --package auv-api-server \
+            --package auv-cli-invoke \
+            --package auv-daemon \
+            --package auv-cli
