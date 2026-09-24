@@ -27,9 +27,10 @@ development shell now provides CMake and exposes the system Swift compiler.
 
 ## Validation
 
-The `cargo-package` CI job packages all 29 crates on macOS. Cargo compiles
-each extracted archive against a temporary local registry. The normal Rust
-matrix tests the workspace on Linux, macOS, and Windows.
+The `cargo-package` CI job selects crates.io-publishable workspace packages
+from Cargo metadata and packages them on macOS. Cargo compiles each extracted
+archive against a temporary local registry. The normal Rust matrix tests the
+workspace on Linux, macOS, and Windows.
 
 The complete 29-crate package set passed on macOS arm64 on 2026-09-24. The run used
 Cargo 1.96.0, CMake 4.1.2, and Apple Swift 6.2.1.

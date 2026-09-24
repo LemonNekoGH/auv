@@ -100,33 +100,22 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Package and compile registry archives
         run: |
-          cargo package --locked \
-            --package auv-api-proto \
-            --package auv-cli-common-macros \
-            --package auv-cli-invoke-macros \
-            --package auv-driver-common \
-            --package auv-inference-common \
-            --package auv-query-readiness \
-            --package auv-tracing \
-            --package auv-api-client \
-            --package auv-cli-common \
-            --package auv-driver-linux \
-            --package auv-driver-overlay-common \
-            --package auv-inference-ort \
-            --package auv-inference-ultralytics \
-            --package auv-media-macos \
-            --package auv-tracing-otel \
-            --package auv-view \
-            --package auv-driver-overlay-macos \
-            --package auv-driver-overlay-windows \
-            --package auv-task-object-detection \
-            --package auv-driver-overlay \
-            --package auv-driver-macos \
-            --package auv-driver-windows \
-            --package auv-driver \
-            --package auv-core \
-            --package auv-scan \
-            --package auv-api-server \
-            --package auv-cli-invoke \
-            --package auv-daemon \
-            --package auv-cli
+          python3 - <<'PY'
+          import json
+          import subprocess
+
+          metadata = json.loads(subprocess.check_output(
+            ['cargo', 'metadata', '--locked', '--no-deps', '--format-version', '1']
+          ))
+          packages = sorted(
+            package['name'] for package in metadata['packages']
+            if package['publish'] is None or 'crates-io' in package['publish']
+          )
+          if not packages:
+            raise SystemExit('No crates.io-publishable workspace packages found')
+          print(f"Packaging {len(packages)} crates: {', '.join(packages)}", flush=True)
+          subprocess.run(
+            ['cargo', 'package', '--locked', *(item for name in packages for item in ('--package', name))],
+            check=True,
+          )
+          PY
