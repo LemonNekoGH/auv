@@ -89,33 +89,3 @@ jobs:
             echo "Run scripts/generate-proto-vendor."
             exit 1
           fi
-
-  cargo-package:
-    name: package crates.io crates
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: recursive
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Package and compile registry archives
-        run: |
-          python3 - <<'PY'
-          import json
-          import subprocess
-
-          metadata = json.loads(subprocess.check_output(
-            ['cargo', 'metadata', '--locked', '--no-deps', '--format-version', '1']
-          ))
-          packages = sorted(
-            package['name'] for package in metadata['packages']
-            if package['publish'] is None or 'crates-io' in package['publish']
-          )
-          if not packages:
-            raise SystemExit('No crates.io-publishable workspace packages found')
-          print(f"Packaging {len(packages)} crates: {', '.join(packages)}", flush=True)
-          subprocess.run(
-            ['cargo', 'package', '--locked', *(item for name in packages for item in ('--package', name))],
-            check=True,
-          )
-          PY
