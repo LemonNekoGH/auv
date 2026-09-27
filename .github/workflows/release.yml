@@ -158,7 +158,6 @@ jobs:
   publish-crates:
     name: Publish crates.io packages
     needs: build
-    if: github.event_name == 'release' && github.repository == 'moeru-ai/auv'
     runs-on: macos-latest
     permissions:
       contents: read
