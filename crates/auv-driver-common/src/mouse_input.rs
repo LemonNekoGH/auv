@@ -6,6 +6,7 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
+use crate::input_cancellation::current_input_cancellation;
 use crate::{DriverError, DriverResult, InputActionResult, MouseButton, Point};
 
 /// Zero selects the shared mouse, independently of run identity.
@@ -99,11 +100,18 @@ impl MouseCoordinator {
   /// Admission is FIFO within each mouse. A waiting foreign mouse cannot block
   /// the holder's continuation, which is necessary for its eventual release.
   fn enter(&self, id: MouseId, recovery: bool) -> DriverResult<Admission<'_>> {
-    INPUT_CANCELLATION.with(|value| {
-      if let Some(cancellation) = value.borrow().as_ref() {
-        cancellation.register(self);
-      }
-    });
+    if let Some(cancellation) = current_input_cancellation() {
+      let state = Arc::downgrade(&self.state);
+      let changed = Arc::downgrade(&self.changed);
+      // Hold the mouse state lock while notifying so a waiter cannot miss
+      // cancellation between its flag check and Condvar wait.
+      cancellation.register_wakeup(move || {
+        if let (Some(state), Some(changed)) = (state.upgrade(), changed.upgrade()) {
+          let _state = state.lock().unwrap();
+          changed.notify_all();
+        }
+      });
+    }
     let mut state = self.state.lock().unwrap();
     if !state.mice.contains_key(&id) {
       return Err(invalid("unknown logical mouse"));
@@ -189,7 +197,7 @@ impl MouseCoordinator {
       return combine(result, cleanup);
     }
     let coordinator = self.clone();
-    let cancellation = INPUT_CANCELLATION.with(|value| value.borrow().clone());
+    let cancellation = current_input_cancellation();
     std::thread::spawn(move || {
       let mut state = coordinator.state.lock().unwrap();
       loop {
@@ -497,50 +505,8 @@ impl Drop for DesktopInputGuard {
   }
 }
 
-/// Cancellation wakes every coordinator used by the operation, without polling.
-#[derive(Default)]
-pub struct InputCancellation {
-  cancelled: std::sync::atomic::AtomicBool,
-  waiters: Mutex<Vec<(std::sync::Weak<Mutex<State>>, std::sync::Weak<Condvar>)>>,
-}
-impl InputCancellation {
-  pub fn cancel(&self) {
-    self.cancelled.store(true, std::sync::atomic::Ordering::Release);
-    for (state, changed) in self.waiters.lock().unwrap().iter() {
-      if let (Some(state), Some(changed)) = (state.upgrade(), changed.upgrade()) {
-        let _state = state.lock().unwrap();
-        changed.notify_all();
-      }
-    }
-  }
-  fn is_cancelled(&self) -> bool {
-    self.cancelled.load(std::sync::atomic::Ordering::Acquire)
-  }
-  fn register(&self, coordinator: &MouseCoordinator) {
-    let mut waiters = self.waiters.lock().unwrap();
-    waiters.retain(|(state, _)| state.strong_count() != 0);
-    if !waiters.iter().any(|(state, _)| state.ptr_eq(&Arc::downgrade(&coordinator.state))) {
-      waiters.push((Arc::downgrade(&coordinator.state), Arc::downgrade(&coordinator.changed)));
-    }
-  }
-}
-thread_local! {
-  static INPUT_CANCELLATION: std::cell::RefCell<Option<Arc<InputCancellation>>> = const { std::cell::RefCell::new(None) };
-}
 fn input_cancelled() -> bool {
-  INPUT_CANCELLATION.with(|value| value.borrow().as_ref().is_some_and(|flag| flag.is_cancelled()))
-}
-
-/// Binds cancellation to synchronous native work. The transport owns the signal.
-pub fn with_input_cancellation<T>(cancelled: Arc<InputCancellation>, action: impl FnOnce() -> T) -> T {
-  struct Restore(Option<Arc<InputCancellation>>);
-  impl Drop for Restore {
-    fn drop(&mut self) {
-      INPUT_CANCELLATION.with(|value| *value.borrow_mut() = self.0.take());
-    }
-  }
-  let _restore = Restore(INPUT_CANCELLATION.with(|value| value.replace(Some(cancelled))));
-  action()
+  current_input_cancellation().as_ref().is_some_and(|flag| flag.is_cancelled())
 }
 
 fn same_target(a: &crate::InputTarget, b: &crate::InputTarget) -> bool {

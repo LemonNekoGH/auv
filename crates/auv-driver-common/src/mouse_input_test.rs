@@ -1,4 +1,5 @@
 use super::*;
+use crate::input_cancellation::{InputCancellation, with_input_cancellation};
 use std::sync::atomic::{AtomicBool, Ordering};
 #[derive(Default)]
 struct Receiver {

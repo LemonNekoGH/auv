@@ -10,7 +10,7 @@ use std::{
 
 use auv_driver_common::{
   Driver, InputTarget, MouseButton, MouseCubicBezierSegment, MouseMotionOptions, MoveMouseRequest, Point,
-  mouse_input::{InputCancellation, with_input_cancellation},
+  input_cancellation::{InputCancellation, with_input_cancellation},
 };
 use auv_driver_linux::{InputBackend, LinuxDriver};
 

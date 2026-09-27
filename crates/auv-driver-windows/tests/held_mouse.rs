@@ -4,7 +4,7 @@
 use auv_driver_common::{
   CoordinateSpace, Driver, InputTarget, MouseButton, MouseCubicBezierSegment, MouseMotionOptions, MoveMouseRequest, Point, Rect, Window,
   WindowRef,
-  mouse_input::{InputCancellation, with_input_cancellation},
+  input_cancellation::{InputCancellation, with_input_cancellation},
 };
 use auv_driver_windows::WindowsDriver;
 use std::{

@@ -448,7 +448,7 @@ fn held_mouse_reuses_portal_session_and_releases_on_timeout_and_cancel() {
   if std::env::var_os("AUV_PORTAL_HELD_TEST_CHILD").is_some() {
     use auv_driver_common::{
       Driver, InputTarget, MouseButton, Point,
-      mouse_input::{InputCancellation, with_input_cancellation},
+      input_cancellation::{InputCancellation, with_input_cancellation},
     };
     use std::time::Duration;
     let directory = tempfile::tempdir().unwrap();

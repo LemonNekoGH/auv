@@ -21,7 +21,9 @@
         in
         {
           default = pkgs.mkShell {
-            nativeBuildInputs = (with pkgs; [
+            nativeBuildInputs = with pkgs; [
+              # task runner
+              just
               # rust
               rustc
               cargo

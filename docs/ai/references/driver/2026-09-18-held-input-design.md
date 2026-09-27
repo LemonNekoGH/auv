@@ -104,6 +104,9 @@ Admission, active waits, and watchdogs sleep until state changes or their actual
 deadline; there is no 10/20-ms polling policy. Shutdown and explicit cancellation
 wake these waits immediately. The former AtomicBool cancellation argument is
 replaced by `Arc<InputCancellation>`; callers request cancellation with `cancel()`.
+The token and thread binding now live in `auv-driver-common::input_cancellation`;
+mouse waiters register their lock/condition-variable wakeup there, and keyboard
+holds observe the same token.
 
 Progress uses a latest-value mailbox, not a fixed backlog of 16 events. Native
 execution never waits for network feedback and has no one-second feedback timeout.
